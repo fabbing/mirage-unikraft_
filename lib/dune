@@ -1,8 +1,8 @@
 (library
  (name unikraft_os)
  (public_name mirage-unikraft)
- (libraries mirage-unix lwt lwt.unix)
+ (libraries mirage-unix lwt bheap metrics)
  (no_dynlink)
  (foreign_stubs
   (language c)
-  (names stubs)))
+  (names stubs yield)))
