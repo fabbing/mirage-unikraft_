@@ -16,9 +16,7 @@ end  = struct
   (* TODO wait_writable *)
   let wait_readable = ref Dev_map.empty
     
-  let is_in_set set x =
-    let i = Int64.(equal zero (logand set (shift_left one x))) in
-    i (* FIXME not i?! *)
+  let is_in_set set x = not Int64.(equal zero (logand set (shift_left one x)))
 
   let data_on_netdev devid = uk_netdev_is_queue_ready (Int64.of_int devid)
 
@@ -34,7 +32,7 @@ end  = struct
     if not Int64.(equal zero ready_set) then
       Dev_map.iter
         (fun k v ->
-          if is_in_set ready_set (k+1) then Lwt_condition.broadcast v ())
+          if is_in_set ready_set k then Lwt_condition.broadcast v ())
         !wait_readable
 
   let wait_for_work_netdev devid =

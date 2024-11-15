@@ -17,7 +17,7 @@ uint64_t netdev_ready_set;
 
 int64_t netdev_to_setid(uint64_t id)
 {
-    return id + 1;
+    return 1 << id;
 }
 
 void set_netdev_queue_ready(uint64_t id)
