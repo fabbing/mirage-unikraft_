@@ -77,7 +77,8 @@ static void yield(uint64_t deadline, int64_t *ready_set)
 
     pthread_mutex_lock(&ready_sets_mutex);
     while (!ready_flag) {
-        rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex, &timeout);
+        rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex,
+            &timeout);
         if (rc != EINTR)
             break;
     }
