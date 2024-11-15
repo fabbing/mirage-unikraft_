@@ -10,10 +10,10 @@
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t condvar = PTHREAD_COND_INITIALIZER;
-bool flag = false;
-uint64_t netdev_read_ready;
+pthread_mutex_t ready_sets_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t ready_sets_cond = PTHREAD_COND_INITIALIZER;
+bool ready_flag = false;
+uint64_t netdev_ready_set;
 
 int64_t netdev_to_setid(uint64_t id)
 {
@@ -22,40 +22,40 @@ int64_t netdev_to_setid(uint64_t id)
 
 void set_netdev_queue_ready(uint64_t id)
 {
-    pthread_mutex_lock(&mutex);
-    netdev_read_ready |= netdev_to_setid(id);
-    flag = true;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&ready_sets_mutex);
+    netdev_ready_set |= netdev_to_setid(id);
+    ready_flag = true;
+    pthread_mutex_unlock(&ready_sets_mutex);
 }
 
 void set_netdev_queue_empty(uint64_t id)
 {
-    pthread_mutex_lock(&mutex);
-    netdev_read_ready &= ~(netdev_to_setid(id));
-    if (netdev_read_ready == 0) {
-        flag = false;
+    pthread_mutex_lock(&ready_sets_mutex);
+    netdev_ready_set &= ~(netdev_to_setid(id));
+    if (netdev_ready_set == 0) {
+        ready_flag = false;
     }
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&ready_sets_mutex);
 }
 
 static bool netdev_is_queue_ready(int64_t id)
 {
     bool ready;
 
-    pthread_mutex_lock(&mutex);
-    ready = (netdev_read_ready & netdev_to_setid(id)) != 0;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&ready_sets_mutex);
+    ready = (netdev_ready_set & netdev_to_setid(id)) != 0;
+    pthread_mutex_unlock(&ready_sets_mutex);
     return ready;
 }
 
 
 void signal_netdev_queue_ready(uint64_t id)
 {
-    pthread_mutex_lock(&mutex);
-    netdev_read_ready |= netdev_to_setid(id);
-    flag = true;
-    pthread_cond_broadcast(&condvar);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&ready_sets_mutex);
+    netdev_ready_set |= netdev_to_setid(id);
+    ready_flag = true;
+    pthread_cond_broadcast(&ready_sets_cond);
+    pthread_mutex_unlock(&ready_sets_mutex);
 }
 
 #define NANO 1000000000
@@ -75,20 +75,20 @@ static void yield(uint64_t deadline, int64_t *ready_set)
         timeout.tv_nsec -= NANO;
     }
 
-    pthread_mutex_lock(&mutex);
-    while (!flag) {
-        rc = pthread_cond_timedwait(&condvar, &mutex, &timeout);
+    pthread_mutex_lock(&ready_sets_mutex);
+    while (!ready_flag) {
+        rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex, &timeout);
         if (rc != EINTR)
             break;
     }
 
-    if (flag) {
-        *ready_set = netdev_read_ready;
+    if (ready_flag) {
+        *ready_set = netdev_ready_set;
     }
     else {
-        assert(netdev_read_ready == 0);
+        assert(netdev_ready_set == 0);
     }
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&ready_sets_mutex);
 }
 
 CAMLprim value uk_yield(value v_deadline)
