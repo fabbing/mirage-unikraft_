@@ -15,8 +15,9 @@ pthread_cond_t ready_sets_cond = PTHREAD_COND_INITIALIZER;
 bool ready_flag = false;
 uint64_t netdev_ready_set;
 
-int64_t netdev_to_setid(uint64_t id)
+uint64_t netdev_to_setid(long id)
 {
+    assert(id < 63);
     return 1 << id;
 }
 
@@ -38,7 +39,7 @@ void set_netdev_queue_empty(uint64_t id)
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-static bool netdev_is_queue_ready(int64_t id)
+static bool netdev_is_queue_ready(long id)
 {
     bool ready;
 
@@ -49,7 +50,7 @@ static bool netdev_is_queue_ready(int64_t id)
 }
 
 
-void signal_netdev_queue_ready(uint64_t id)
+void signal_netdev_queue_ready(long id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     netdev_ready_set |= netdev_to_setid(id);
@@ -59,7 +60,7 @@ void signal_netdev_queue_ready(uint64_t id)
 }
 
 #define NANO 1000000000
-static void yield(uint64_t deadline, int64_t *ready_set)
+static void yield(uint64_t deadline, uint64_t *ready_set)
 {
     struct timeval now;
     struct timespec timeout;
@@ -96,11 +97,12 @@ CAMLprim value uk_yield(value v_deadline)
 {
     CAMLparam1(v_deadline);
 
-    uint64_t deadline = Int64_val(v_deadline);
-    uint64_t ready_set;
-    yield(deadline, &ready_set);
+    int64_t deadline = Int64_val(v_deadline);
+    assert(deadline >= 0);
+    uint64_t ready_set = 0;
 
-    CAMLreturn(caml_copy_int64(ready_set));
+    yield(deadline, &ready_set);
+    CAMLreturn(Val_long(ready_set));
 }
 
 
@@ -108,7 +110,7 @@ CAMLprim value uk_netdev_is_queue_ready(value v_devid)
 {
     CAMLparam1(v_devid);
     
-    int64_t id = Int64_val(v_devid);
+    long id = Long_val(v_devid);
     if (netdev_is_queue_ready(id)) {
         CAMLreturn(Val_true);
     }

@@ -1,5 +1,5 @@
-external uk_yield: int64 -> int64 = "uk_yield"
-external uk_netdev_is_queue_ready: int64 -> bool =
+external uk_yield: int64 -> int = "uk_yield"
+external uk_netdev_is_queue_ready: int -> bool =
   "uk_netdev_is_queue_ready" [@@noalloc]
 
 module Dev_map = Map.Make(
@@ -16,9 +16,9 @@ end  = struct
   (* TODO wait_writable *)
   let wait_readable = ref Dev_map.empty
     
-  let is_in_set set x = not Int64.(equal zero (logand set (shift_left one x)))
+  let is_in_set set x = not Int.(equal zero (logand set (shift_left one x)))
 
-  let data_on_netdev devid = uk_netdev_is_queue_ready (Int64.of_int devid)
+  let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
     let timeout =
@@ -29,7 +29,7 @@ end  = struct
         | Some tm -> tm
     in
     let ready_set = uk_yield timeout in
-    if not Int64.(equal zero ready_set) then
+    if not Int.(equal zero ready_set) then
       Dev_map.iter
         (fun k v ->
           if is_in_set ready_set k then Lwt_condition.broadcast v ())
