@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <pthread.h>
 
+#include <uk/plat/time.h>
+
 #include <caml/alloc.h>
 #include <caml/callback.h>
 #include <caml/memory.h>
@@ -20,18 +22,11 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-int64_t uk_clock_monotonic(void)
-{
-    struct timespec ts;
-
-    assert(clock_gettime(CLOCK_MONOTONIC, &ts) == 0);
-    return ts.tv_sec * 1000000000 + ts.tv_nsec;
-}
-
 CAMLprim value caml_get_monotonic_time(value v_unit)
 {
     CAMLparam1(v_unit);
-    CAMLreturn(caml_copy_int64(uk_clock_monotonic()));
+    __nsec ns = ukplat_monotonic_clock();
+    CAMLreturn(caml_copy_int64(ns));
 }
 
 #endif
