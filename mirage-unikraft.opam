@@ -14,8 +14,9 @@ depends: [
   "dune" {>= "3.16"}
   "lwt"
   "mirage-unix"
+  "bheap"
+  "metrics"
   "odoc" {with-doc}
-  "bheap" {>= "2.0.0"}
 ]
 build: [
   ["dune" "subst"] {dev}
