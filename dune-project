@@ -18,5 +18,5 @@
  (synopsis "Unikraft core platform libraries for MirageOS")
  (description
   "This packages provides the MirageOS `OS` library for Unikraft targets.")
- (depends ocaml dune lwt mirage-unix bheap metrics)
+ (depends ocaml dune mirage-runtime mirage-unix bheap lwt cstruct metrics duration)
  (tags ("org:mirage")))

@@ -1,7 +1,7 @@
 (library
  (name unikraft_os)
  (public_name mirage-unikraft)
- (libraries mirage-unix lwt bheap metrics)
+ (libraries mirage-runtime mirage-unix bheap lwt cstruct metrics duration)
  (no_dynlink)
  (foreign_stubs
   (language c)

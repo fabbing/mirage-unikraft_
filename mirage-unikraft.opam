@@ -12,10 +12,13 @@ bug-reports: "https://github.com/shym/mirage-unikraft/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.16"}
-  "lwt"
+  "mirage-runtime"
   "mirage-unix"
   "bheap"
+  "lwt"
+  "cstruct"
   "metrics"
+  "duration"
   "odoc" {with-doc}
 ]
 build: [
