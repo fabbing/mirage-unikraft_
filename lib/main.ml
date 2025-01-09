@@ -1,21 +1,28 @@
-external uk_yield: int64 -> int = "uk_yield"
-external uk_netdev_is_queue_ready: int -> bool =
-  "uk_netdev_is_queue_ready" [@@noalloc]
+type key = Net of int | Block of int * int | Nothing
 
-module Dev_map = Map.Make(
+external uk_yield: int64 -> bool = "uk_yield"
+external uk_netdev_is_queue_ready: int -> bool =
+    "uk_netdev_is_queue_ready" [@@noalloc]
+external uk_next_io : unit -> key = "uk_next_io"
+
+module Pending_map = Map.Make(
   struct
-    type t = int
+    (* Net: device_id; Block: device_id * token_id *)
+    type t = key
     let compare = compare
   end)
 
 module UkEngine : sig
   val iter : bool -> unit
+
   val wait_for_work_netdev : int -> unit Lwt.t
   val data_on_netdev : int -> bool
+  
+  val wait_for_work_blkdev : int -> int -> unit Lwt.t
+
 end  = struct
-  (* TODO wait_writable *)
-  let wait_readable = ref Dev_map.empty
-    
+  let wait_device_ready = ref Pending_map.empty
+
   let is_in_set set x = not Int.(equal zero (logand set (shift_left one x)))
 
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
@@ -28,20 +35,35 @@ end  = struct
         | None -> Int64.add (Time.time ()) (Duration.of_day 1)
         | Some tm -> tm
     in
-    let ready_set = uk_yield timeout in
-    if not Int.(equal zero ready_set) then
-      Dev_map.iter
-        (fun k v ->
-          if is_in_set ready_set k then Lwt_condition.broadcast v ())
-        !wait_readable
+    let io = uk_yield timeout in
+    if io then (
+        match uk_next_io () with
+        | Nothing -> assert false
+        | io -> (
+            match Pending_map.find_opt io !wait_device_ready with
+            | Some cond -> Lwt_condition.broadcast cond ()
+            | _ -> assert false))
 
   let wait_for_work_netdev devid =
-    match Dev_map.find_opt devid !wait_readable with
+    let key = Net devid in
+    match Pending_map.find_opt key !wait_device_ready with
     | None ->
         let cond = Lwt_condition.create () in
-        wait_readable := Dev_map.add devid cond !wait_readable;
+        wait_device_ready := Pending_map.add key cond !wait_device_ready;
         Lwt_condition.wait cond
     | Some cond -> Lwt_condition.wait cond
+
+  let wait_for_work_blkdev devid tokid =
+    let key = Block (devid, tokid) in
+    let cond =
+      match Pending_map.find_opt key !wait_device_ready with
+      | None ->
+          let cond = Lwt_condition.create () in
+          wait_device_ready := Pending_map.add key cond !wait_device_ready;
+          cond
+      | Some cond -> cond
+    in
+    Lwt_condition.wait cond
 end
 
 (* From lwt/src/unix/lwt_main.ml *)
