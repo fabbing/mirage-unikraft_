@@ -1,3 +1,3 @@
-module Lifecycle = Unix_os.Lifecycle
+module Lifecycle = Lifecycle
 module Main = Main
 module Time = Time
