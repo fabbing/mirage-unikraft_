@@ -28,21 +28,25 @@ end  = struct
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
+    let now = Time.time () in
     let timeout =
       if nonblocking then Int64.zero
       else
-        match Time.select_next () with
-        | None -> Int64.add (Time.time ()) (Duration.of_day 1)
-        | Some tm -> tm
+        let tm =
+          match Time.select_next () with
+          | None -> Duration.of_day 1
+          | Some tm -> tm
+        in
+        if tm < now then 0L else Int64.(sub tm now)
     in
     let io = uk_yield timeout in
-    if io then (
-        match uk_next_io () with
-        | Nothing -> assert false
-        | io -> (
-            match Pending_map.find_opt io !wait_device_ready with
-            | Some cond -> Lwt_condition.broadcast cond ()
-            | _ -> assert false))
+    if io then
+      match uk_next_io () with
+      | Nothing -> assert false
+      | io -> (
+          match Pending_map.find_opt io !wait_device_ready with
+          | Some cond -> Lwt_condition.broadcast cond ()
+          | _ -> assert false)
 
   let wait_for_work_netdev devid =
     let key = Net devid in
