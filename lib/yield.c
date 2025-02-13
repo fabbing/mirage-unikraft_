@@ -101,8 +101,9 @@ static bool yield(uint64_t deadline)
     while (!ready) {
         rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex,
             &timeout);
-        if (rc != EINTR)
+        if (rc == ETIMEDOUT) {
             break;
+        }
 
         ready = netdev_ready_set != 0;
         for (int i = 0; i < MAX_BLK_DEVICES && !ready; i++) {
