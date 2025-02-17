@@ -1,9 +1,8 @@
 type key = Net of int | Block of int * int | Nothing
 
-external uk_yield: int64 -> bool = "uk_yield"
+external uk_yield: int64 -> key = "uk_yield"
 external uk_netdev_is_queue_ready: int -> bool =
     "uk_netdev_is_queue_ready" [@@noalloc]
-external uk_next_io : unit -> key = "uk_next_io"
 
 module Pending_map = Map.Make(
   struct
@@ -39,14 +38,12 @@ end  = struct
         in
         if tm < now then 0L else Int64.(sub tm now)
     in
-    let io = uk_yield timeout in
-    if io then
-      match uk_next_io () with
-      | Nothing -> assert false
-      | io -> (
-          match Pending_map.find_opt io !wait_device_ready with
-          | Some cond -> Lwt_condition.broadcast cond ()
-          | _ -> assert false)
+    match uk_yield timeout with
+    | Nothing -> ()
+    | io -> (
+        match Pending_map.find_opt io !wait_device_ready with
+        | Some cond -> Lwt_condition.broadcast cond ()
+        | _ -> assert false)
 
   let wait_for_work_netdev devid =
     let key = Net devid in

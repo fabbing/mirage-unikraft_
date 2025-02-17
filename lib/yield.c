@@ -18,13 +18,13 @@ uint64_t netdev_ready_set;
 uint64_t blkdev_ready_set[MAX_BLK_DEVICES];
 
 
-uint64_t netdev_to_setid(long id)
+static uint64_t netdev_to_setid(long id)
 {
     assert(id < 63);
     return 1 << id;
 }
 
-uint64_t token_to_setid(long id)
+static uint64_t token_to_setid(long id)
 {
     assert(id < 63);
     return 1 << id;
@@ -77,12 +77,18 @@ void set_block_request_completed(unsigned int devid, unsigned int tokenid)
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
+typedef struct {
+    int8_t netid;
+    int8_t blkid;
+    int8_t tokid;
+} t_next_io;
+
 #define NANO 1000000000
-static bool yield(uint64_t deadline)
+static bool yield(uint64_t deadline, t_next_io *next_io)
 {
     struct timeval now;
     struct timespec timeout;
-    int rc = 0;
+    bool ready = false;
 
     gettimeofday(&now, NULL);
     timeout.tv_sec = now.tv_sec  + deadline / NANO;
@@ -93,23 +99,36 @@ static bool yield(uint64_t deadline)
     }
 
     pthread_mutex_lock(&ready_sets_mutex);
-    bool ready = netdev_ready_set != 0;
-    for (int i = 0; i < MAX_BLK_DEVICES && !ready; i++) {
-        ready = blkdev_ready_set[i] != 0;
-    }
+    do {
+        if (netdev_ready_set != 0) {
+          for (int i = 0; i < MAX_NET_DEVICES; i++) {
+              if (netdev_ready_set & netdev_to_setid(i)) {
+                  ready = true;
+                  next_io->netid = i;
+                  goto out;
+              }
+          }
+        }
+        for (int i = 0; i < MAX_BLK_DEVICES; i++) {
+            if (blkdev_ready_set[i] != 0) {
+                for (int j = 0; j < MAX_BLK_TOKENS; j++) {
+                    if (blkdev_ready_set[i] & token_to_setid(j)) {
+                        ready = true;
+                        next_io->blkid = i;
+                        next_io->tokid = j;
+                        goto out;
+                    }
+                }
+            }
+        }
 
-    while (!ready) {
-        rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex,
-            &timeout);
+        int rc = pthread_cond_timedwait(&ready_sets_cond, &ready_sets_mutex,
+                &timeout);
         if (rc == ETIMEDOUT) {
             break;
         }
-
-        ready = netdev_ready_set != 0;
-        for (int i = 0; i < MAX_BLK_DEVICES && !ready; i++) {
-            ready = blkdev_ready_set[i] != 0;
-        }
-    }
+    } while (1);
+out:
     pthread_mutex_unlock(&ready_sets_mutex);
     return ready;
 }
@@ -117,13 +136,33 @@ static bool yield(uint64_t deadline)
 value uk_yield(value v_deadline)
 {
     CAMLparam1(v_deadline);
+    CAMLlocal1(v_result);
 
     int64_t deadline = Int64_val(v_deadline);
     assert(deadline >= 0);
 
-    bool result = yield(deadline);
+    t_next_io next_io = {-1, -1, -1};
+    bool result = yield(deadline, &next_io);
 
-    CAMLreturn(result ? Val_true : Val_false);
+    if (result) {
+        if (next_io.netid != -1) {
+            v_result = caml_alloc(1, 0); // key:Net
+            Store_field(v_result, 0, Val_int(next_io.netid));
+        }
+        else {
+            assert(next_io.blkid != -1);
+            assert(next_io.tokid != -1);
+            v_result = caml_alloc(2, 1); // key:Block
+            Store_field(v_result, 0, Val_int(next_io.blkid));
+            Store_field(v_result, 1, Val_int(next_io.tokid));
+        }
+        assert(v_result != Val_int(0));
+    }
+    else {
+        v_result = Val_int(0); // key:Nothing
+    }
+
+    CAMLreturn(v_result);
 }
 
 value uk_netdev_is_queue_ready(value v_devid)
@@ -135,42 +174,4 @@ value uk_netdev_is_queue_ready(value v_devid)
         CAMLreturn(Val_true);
     }
     CAMLreturn(Val_false);
-}
-
-value uk_next_io(value v_unit)
-{
-    CAMLparam1(v_unit);
-    CAMLlocal1(v_result);
-
-    v_result = Val_int(0); // key:Nothing
-
-    pthread_mutex_lock(&ready_sets_mutex);
-    if (netdev_ready_set != 0) {
-        for (int i = 0; i < MAX_NET_DEVICES; i++) {
-            if (netdev_ready_set & netdev_to_setid(i)) {
-                v_result = caml_alloc(1, 0); /* key:Net */
-                Store_field(v_result, 0, Val_int(i));
-                break;
-                //CAMLreturn(v_result);
-            }
-        }
-        assert(v_result != Val_int(0));
-    }
-    else {
-        for (int i = 0; i < MAX_BLK_DEVICES; i++) {
-            if (blkdev_ready_set[i] != 0) {
-                for (int j = 0; j < MAX_BLK_TOKENS; j++) {
-                    if (blkdev_ready_set[i] & token_to_setid(j)) {
-                        v_result = caml_alloc(2, 1);
-                        Store_field(v_result, 0, Val_int(i));
-                        Store_field(v_result, 1, Val_int(j));
-                        break;
-                    }
-                }
-                assert(v_result != Val_int(0));
-            }
-        }
-    }
-    pthread_mutex_unlock(&ready_sets_mutex);
-    CAMLreturn(v_result);
 }
