@@ -5,7 +5,7 @@
 
 #define MAX_NET_DEVICES   16
 #define MAX_BLK_DEVICES   16
-#define MAX_BLK_TOKENS    32
+#define MAX_BLK_TOKENS    62
 
 void signal_netdev_queue_ready(int64_t id);
 

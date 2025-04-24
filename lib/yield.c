@@ -21,13 +21,13 @@ uint64_t blkdev_ready_set[MAX_BLK_DEVICES];
 static uint64_t netdev_to_setid(long id)
 {
     assert(id < 63);
-    return 1 << id;
+    return 1L << id;
 }
 
 static uint64_t token_to_setid(long id)
 {
     assert(id < 63);
-    return 1 << id;
+    return 1L << id;
 }
 
 void set_netdev_queue_ready(uint64_t id)
