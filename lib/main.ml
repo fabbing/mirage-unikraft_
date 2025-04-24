@@ -22,11 +22,12 @@ end)
 
 module UkEngine : sig
   val iter : bool -> unit
-  val wait_for_work_netdev : int -> unit Lwt.t
   val data_on_netdev : int -> bool
+  val wait_for_work_netdev : int -> unit Lwt.t
   val wait_for_work_blkdev : int -> int -> unit Lwt.t
 end = struct
   let wait_device_ready = ref Pending_map.empty
+
   let is_in_set set x = not Int.(equal zero (logand set (shift_left one x)))
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
@@ -35,12 +36,12 @@ end = struct
     let timeout =
       if nonblocking then Int64.zero
       else
-        let tm =
+        let time =
           match Time.select_next () with
           | None -> Duration.of_day 1
-          | Some tm -> tm
+          | Some time -> time
         in
-        if tm < now then 0L else Int64.(sub tm now)
+        if time < now then 0L else Int64.(sub time now)
     in
     match uk_yield timeout with
     | Nothing -> ()
@@ -49,28 +50,20 @@ end = struct
         | Some cond -> Lwt_condition.broadcast cond ()
         | _ -> assert false)
 
+  let pending_cond key =
+    match Pending_map.find_opt key !wait_device_ready with
+    | None ->
+        let cond = Lwt_condition.create () in
+        wait_device_ready := Pending_map.add key cond !wait_device_ready;
+        cond
+    | Some cond -> cond
+
   let wait_for_work_netdev devid =
-    let key = Net devid in
-    let cond =
-        match Pending_map.find_opt key !wait_device_ready with
-        | None ->
-            let cond = Lwt_condition.create () in
-            wait_device_ready := Pending_map.add key cond !wait_device_ready;
-            cond
-        | Some cond -> cond
-    in
+    let cond = pending_cond (Net devid) in
     Lwt_condition.wait cond
 
   let wait_for_work_blkdev devid tokid =
-    let key = Block (devid, tokid) in
-    let cond =
-      match Pending_map.find_opt key !wait_device_ready with
-      | None ->
-          let cond = Lwt_condition.create () in
-          wait_device_ready := Pending_map.add key cond !wait_device_ready;
-          cond
-      | Some cond -> cond
-    in
+    let cond = pending_cond (Block (devid, tokid)) in
     Lwt_condition.wait cond
 end
 
