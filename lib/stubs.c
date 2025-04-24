@@ -1,3 +1,12 @@
+/* SPDX-License-Identifier: MIT */
+/*
+ * Authors: Fabrice Buoro <fabrice@tarides.com>
+ *          Samuel Hym <samuel@tarides.com>
+ *
+ * Copyright (c) 2024-2025, Tarides.
+ *               All rights reserved.
+*/
+
 #ifdef __Unikraft__
 
 #include <assert.h>
@@ -29,4 +38,4 @@ CAMLprim value caml_get_monotonic_time(value v_unit)
     CAMLreturn(caml_copy_int64(ns));
 }
 
-#endif
+#endif /* __Unikraft__ */

@@ -1,3 +1,12 @@
+/* SPDX-License-Identifier: MIT */
+/*
+ * Authors: Fabrice Buoro <fabrice@tarides.com>
+ *          Samuel Hym <samuel@tarides.com>
+ *
+ * Copyright (c) 2024-2025, Tarides.
+ *               All rights reserved.
+*/
+
 #ifndef YIELD_H
 #define YIELD_H
 

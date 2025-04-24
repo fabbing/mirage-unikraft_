@@ -1,3 +1,15 @@
+
+/* SPDX-License-Identifier: MIT */
+/*
+ * Authors: Fabrice Buoro <fabrice@tarides.com>
+ *          Samuel Hym <samuel@tarides.com>
+ *
+ * Copyright (c) 2024-2025, Tarides.
+ *               All rights reserved.
+*/
+
+#ifdef __Unikraft__
+
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
@@ -16,7 +28,6 @@ pthread_mutex_t ready_sets_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t ready_sets_cond = PTHREAD_COND_INITIALIZER;
 uint64_t netdev_ready_set;
 uint64_t blkdev_ready_set[MAX_BLK_DEVICES];
-
 
 static uint64_t netdev_to_setid(long id)
 {
@@ -175,3 +186,5 @@ value uk_netdev_is_queue_ready(value v_devid)
     }
     CAMLreturn(Val_false);
 }
+
+#endif /* __Unikraft__ */

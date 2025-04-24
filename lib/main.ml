@@ -1,29 +1,33 @@
+(* SPDX-License-Identifier: MIT *)
+(*
+ * Copyright (c) 2009 Jérémie Dimino
+ * Copyright (c) 2010 Anil Madhavapeddy <anil@recoil.org>
+ * Copyright (c) 2024-2025 Fabrice Buoro <fabrice@tarides.com>
+ * Copyright (c) 2024-2025 Samuel Hym <samuel@tarides.com>
+ *)
+
 type key = Net of int | Block of int * int | Nothing
 
-external uk_yield: int64 -> key = "uk_yield"
-external uk_netdev_is_queue_ready: int -> bool =
-    "uk_netdev_is_queue_ready" [@@noalloc]
+external uk_yield : int64 -> key = "uk_yield"
 
-module Pending_map = Map.Make(
-  struct
-    (* Net: device_id; Block: device_id * token_id *)
-    type t = key
-    let compare = compare
-  end)
+external uk_netdev_is_queue_ready : int -> bool = "uk_netdev_is_queue_ready"
+[@@noalloc]
+
+module Pending_map = Map.Make (struct
+  (* Net: device_id; Block: device_id * token_id *)
+  type t = key
+
+  let compare = compare
+end)
 
 module UkEngine : sig
   val iter : bool -> unit
-
   val wait_for_work_netdev : int -> unit Lwt.t
   val data_on_netdev : int -> bool
-  
   val wait_for_work_blkdev : int -> int -> unit Lwt.t
-
-end  = struct
+end = struct
   let wait_device_ready = ref Pending_map.empty
-
   let is_in_set set x = not Int.(equal zero (logand set (shift_left one x)))
-
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
@@ -75,15 +79,15 @@ let rec run t =
   match Lwt.poll t with
   | Some () -> ()
   | None ->
-    (* Call enter hooks. *)
-    Mirage_runtime.run_enter_iter_hooks ();
-    (* Do the main loop call. *)
-    UkEngine.iter (Lwt.paused_count () > 0);
-    (* Wakeup paused threads again. *)
-    Lwt.wakeup_paused ();
-    (* Call leave hooks. *)
-    Mirage_runtime.run_leave_iter_hooks ();
-    run t
+      (* Call enter hooks. *)
+      Mirage_runtime.run_enter_iter_hooks ();
+      (* Do the main loop call. *)
+      UkEngine.iter (Lwt.paused_count () > 0);
+      (* Wakeup paused threads again. *)
+      Lwt.wakeup_paused ();
+      (* Call leave hooks. *)
+      Mirage_runtime.run_leave_iter_hooks ();
+      run t
 
 (* If the platform doesn't have SIGPIPE, then Sys.set_signal will
    raise an Invalid_argument exception. If the signal does not exist
