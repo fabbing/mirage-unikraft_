@@ -16,12 +16,16 @@
 #define MAX_BLK_DEVICES   16
 #define MAX_BLK_TOKENS    62
 
-void signal_netdev_queue_ready(int64_t id);
+typedef unsigned int net_id_t;
 
-void set_netdev_queue_ready(uint64_t id);
-void set_netdev_queue_empty(uint64_t id);
+typedef unsigned int block_id_t;
+typedef unsigned int token_id_t;
 
-void signal_block_request_ready(unsigned int devid, unsigned int tokenid);
-void set_block_request_completed(unsigned int devid, unsigned int tokenid);
+void signal_netdev_queue_ready(net_id_t id);
+void set_netdev_queue_ready(net_id_t id);
+void set_netdev_queue_empty(net_id_t id);
+
+void signal_block_request_ready(block_id_t devid, token_id_t tokenid);
+void set_block_request_completed(block_id_t devid, token_id_t tokenid);
 
 #endif /* !YIELD_H */

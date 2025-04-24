@@ -29,33 +29,33 @@ pthread_cond_t ready_sets_cond = PTHREAD_COND_INITIALIZER;
 uint64_t netdev_ready_set;
 uint64_t blkdev_ready_set[MAX_BLK_DEVICES];
 
-static uint64_t netdev_to_setid(long id)
+static uint64_t netdev_to_setid(net_id_t id)
 {
     assert(id < 63);
     return 1L << id;
 }
 
-static uint64_t token_to_setid(long id)
+static uint64_t token_to_setid(token_id_t id)
 {
     assert(id < 63);
     return 1L << id;
 }
 
-void set_netdev_queue_ready(uint64_t id)
+void set_netdev_queue_ready(net_id_t id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     netdev_ready_set |= netdev_to_setid(id);
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-void set_netdev_queue_empty(uint64_t id)
+void set_netdev_queue_empty(net_id_t id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     netdev_ready_set &= ~(netdev_to_setid(id));
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-static bool netdev_is_queue_ready(long id)
+static bool netdev_is_queue_ready(net_id_t id)
 {
     bool ready;
 
@@ -65,7 +65,7 @@ static bool netdev_is_queue_ready(long id)
     return ready;
 }
 
-void signal_netdev_queue_ready(long id)
+void signal_netdev_queue_ready(net_id_t id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     netdev_ready_set |= netdev_to_setid(id);
@@ -73,7 +73,7 @@ void signal_netdev_queue_ready(long id)
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-void signal_block_request_ready(unsigned int devid, unsigned int tokenid)
+void signal_block_request_ready(block_id_t devid, token_id_t tokenid)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     blkdev_ready_set[devid] |= token_to_setid(tokenid);
@@ -81,7 +81,7 @@ void signal_block_request_ready(unsigned int devid, unsigned int tokenid)
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-void set_block_request_completed(unsigned int devid, unsigned int tokenid)
+void set_block_request_completed(block_id_t devid, token_id_t tokenid)
 {
     pthread_mutex_lock(&ready_sets_mutex);
     blkdev_ready_set[devid] &= ~(token_to_setid(tokenid));
@@ -89,9 +89,9 @@ void set_block_request_completed(unsigned int devid, unsigned int tokenid)
 }
 
 typedef struct {
-    int8_t netid;
-    int8_t blkid;
-    int8_t tokid;
+    net_id_t netid;
+    block_id_t blkid;
+    token_id_t tokid;
 } t_next_io;
 
 #define NANO 1000000000
@@ -112,7 +112,7 @@ static bool yield(uint64_t deadline, t_next_io *next_io)
     pthread_mutex_lock(&ready_sets_mutex);
     do {
         if (netdev_ready_set != 0) {
-          for (int i = 0; i < MAX_NET_DEVICES; i++) {
+          for (net_id_t i = 0; i < MAX_NET_DEVICES; i++) {
               if (netdev_ready_set & netdev_to_setid(i)) {
                   ready = true;
                   next_io->netid = i;
@@ -120,9 +120,9 @@ static bool yield(uint64_t deadline, t_next_io *next_io)
               }
           }
         }
-        for (int i = 0; i < MAX_BLK_DEVICES; i++) {
+        for (block_id_t i = 0; i < MAX_BLK_DEVICES; i++) {
             if (blkdev_ready_set[i] != 0) {
-                for (int j = 0; j < MAX_BLK_TOKENS; j++) {
+                for (token_id_t j = 0; j < MAX_BLK_TOKENS; j++) {
                     if (blkdev_ready_set[i] & token_to_setid(j)) {
                         ready = true;
                         next_io->blkid = i;
@@ -149,11 +149,11 @@ value uk_yield(value v_deadline)
     CAMLparam1(v_deadline);
     CAMLlocal1(v_result);
 
-    int64_t deadline = Int64_val(v_deadline);
+    const int64_t deadline = Int64_val(v_deadline);
     assert(deadline >= 0);
 
     t_next_io next_io = {-1, -1, -1};
-    bool result = yield(deadline, &next_io);
+    const bool result = yield(deadline, &next_io);
 
     if (result) {
         if (next_io.netid != -1) {
