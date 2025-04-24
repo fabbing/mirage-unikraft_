@@ -51,12 +51,15 @@ end = struct
 
   let wait_for_work_netdev devid =
     let key = Net devid in
-    match Pending_map.find_opt key !wait_device_ready with
-    | None ->
-        let cond = Lwt_condition.create () in
-        wait_device_ready := Pending_map.add key cond !wait_device_ready;
-        Lwt_condition.wait cond
-    | Some cond -> Lwt_condition.wait cond
+    let cond =
+        match Pending_map.find_opt key !wait_device_ready with
+        | None ->
+            let cond = Lwt_condition.create () in
+            wait_device_ready := Pending_map.add key cond !wait_device_ready;
+            cond
+        | Some cond -> cond
+    in
+    Lwt_condition.wait cond
 
   let wait_for_work_blkdev devid tokid =
     let key = Block (devid, tokid) in
