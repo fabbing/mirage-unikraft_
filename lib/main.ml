@@ -28,7 +28,6 @@ module UkEngine : sig
 end = struct
   let wait_device_ready = ref Pending_map.empty
 
-  let is_in_set set x = not Int.(equal zero (logand set (shift_left one x)))
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
