@@ -6,6 +6,7 @@
  * Copyright (c) 2024-2025 Samuel Hym <samuel@tarides.com>
  *)
 
+(* Net: device_id; Block: device_id * token_id *)
 type key = Net of int | Block of int * int | Nothing
 
 external uk_yield : int64 -> key = "uk_yield"
@@ -14,7 +15,6 @@ external uk_netdev_is_queue_ready : int -> bool = "uk_netdev_is_queue_ready"
 [@@noalloc]
 
 module Pending_map = Map.Make (struct
-  (* Net: device_id; Block: device_id * token_id *)
   type t = key
 
   let compare = compare
