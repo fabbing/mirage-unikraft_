@@ -20,7 +20,7 @@ module Pending_map = Hashtbl.Make(struct
   let hash = Hashtbl.hash
 end)
 
-module Uk_Engine : sig
+module Uk_engine : sig
   val iter : bool -> unit
   val data_on_netdev : int -> bool
   val wait_for_work_netdev : int -> unit Lwt.t
@@ -77,7 +77,7 @@ let rec run t =
       (* Call enter hooks. *)
       Mirage_runtime.run_enter_iter_hooks ();
       (* Do the main loop call. *)
-      Uk_Engine.iter (Lwt.paused_count () > 0);
+      Uk_engine.iter (Lwt.paused_count () > 0);
       (* Wakeup paused threads again. *)
       Lwt.wakeup_paused ();
       (* Call leave hooks. *)
