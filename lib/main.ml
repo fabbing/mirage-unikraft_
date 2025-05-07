@@ -14,10 +14,10 @@ external uk_yield : int64 -> key = "uk_yield"
 external uk_netdev_is_queue_ready : int -> bool = "uk_netdev_is_queue_ready"
 [@@noalloc]
 
-module Pending_map = Map.Make (struct
+module Pending_map = Hashtbl.Make(struct
   type t = key
-
-  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
 end)
 
 module Uk_Engine : sig
@@ -26,7 +26,7 @@ module Uk_Engine : sig
   val wait_for_work_netdev : int -> unit Lwt.t
   val wait_for_work_blkdev : int -> int -> unit Lwt.t
 end = struct
-  let wait_device_ready = ref Pending_map.empty
+  let wait_device_ready = Pending_map.create 10
 
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
@@ -45,15 +45,15 @@ end = struct
     match uk_yield timeout with
     | Nothing -> ()
     | io -> (
-        match Pending_map.find_opt io !wait_device_ready with
+        match Pending_map.find_opt wait_device_ready io with
         | Some cond -> Lwt_condition.broadcast cond ()
         | _ -> assert false)
 
   let pending_cond key =
-    match Pending_map.find_opt key !wait_device_ready with
+    match Pending_map.find_opt wait_device_ready key with
     | None ->
         let cond = Lwt_condition.create () in
-        wait_device_ready := Pending_map.add key cond !wait_device_ready;
+        Pending_map.add wait_device_ready key cond;
         cond
     | Some cond -> cond
 
