@@ -22,7 +22,6 @@ typedef unsigned int block_id_t;
 typedef unsigned int token_id_t;
 
 void signal_netdev_queue_ready(net_id_t id);
-void set_netdev_queue_ready(net_id_t id);
 void set_netdev_queue_empty(net_id_t id);
 
 void signal_block_request_ready(block_id_t devid, token_id_t tokenid);

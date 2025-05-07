@@ -41,13 +41,6 @@ static uint64_t token_to_setid(token_id_t id)
     return 1L << id;
 }
 
-void set_netdev_queue_ready(net_id_t id)
-{
-    pthread_mutex_lock(&ready_sets_mutex);
-    netdev_ready_set |= netdev_to_setid(id);
-    pthread_mutex_unlock(&ready_sets_mutex);
-}
-
 void set_netdev_queue_empty(net_id_t id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
