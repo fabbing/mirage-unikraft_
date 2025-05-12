@@ -27,20 +27,17 @@ module Uk_engine : sig
   val wait_for_work_blkdev : int -> int -> unit Lwt.t
 end = struct
   let wait_device_ready = Pending_map.create 10
-
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
-    let now = Time.time () in
     let timeout =
       if nonblocking then Int64.zero
       else
-        let time =
-          match Time.select_next () with
-          | None -> Duration.of_day 1
-          | Some time -> time
-        in
-        if time < now then 0L else Int64.(sub time now)
+        match Time.select_next () with
+        | None -> Duration.of_day 1
+        | Some time ->
+            let now = Time.time () in
+            if time < now then 0L else Int64.(sub time now)
     in
     match uk_yield timeout with
     | Nothing -> ()
