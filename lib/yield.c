@@ -161,8 +161,7 @@ value uk_yield(value v_deadline)
 
       case NET:
         assert(next_io.netid != -1);
-        v_result = caml_alloc(1, 0); // key:Net
-        Store_field(v_result, 0, Val_int(next_io.netid));
+        v_result = caml_alloc_1(0 /*Net*/, Val_int(next_io.netid));
         break;
 
       case BLOCK:
