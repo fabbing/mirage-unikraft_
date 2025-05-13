@@ -166,9 +166,8 @@ value uk_yield(value v_deadline)
 
       case BLOCK:
         assert(next_io.blkid != -1 && next_io.tokid != -1);
-        v_result = caml_alloc(2, 1); // key:Block
-        Store_field(v_result, 0, Val_int(next_io.blkid));
-        Store_field(v_result, 1, Val_int(next_io.tokid));
+        v_result = caml_alloc_2(1 /*Block*/, Val_int(next_io.blkid),
+          Val_int(next_io.tokid));
     }
     CAMLreturn(v_result);
 }
