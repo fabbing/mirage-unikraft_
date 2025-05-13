@@ -19,15 +19,8 @@
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 
-void *uk_caml_main(void *argv) {
-    caml_startup((char**) argv);
-    return NULL;
-}
-
 int main(int argc, char **argv) {
-    pthread_t m;
-    assert(pthread_create(&m, NULL, &uk_caml_main, argv) == 0);
-    assert(pthread_join(m, NULL) == 0);
+    caml_startup((char**) argv);
     return 0;
 }
 

@@ -41,13 +41,6 @@ static uint64_t token_to_setid(token_id_t id)
     return 1L << id;
 }
 
-void set_netdev_queue_ready(net_id_t id)
-{
-    pthread_mutex_lock(&ready_sets_mutex);
-    netdev_ready_set |= netdev_to_setid(id);
-    pthread_mutex_unlock(&ready_sets_mutex);
-}
-
 void set_netdev_queue_empty(net_id_t id)
 {
     pthread_mutex_lock(&ready_sets_mutex);
@@ -88,18 +81,26 @@ void set_block_request_completed(block_id_t devid, token_id_t tokenid)
     pthread_mutex_unlock(&ready_sets_mutex);
 }
 
-typedef struct {
+typedef union {
     net_id_t netid;
-    block_id_t blkid;
-    token_id_t tokid;
-} t_next_io;
+    struct {
+      block_id_t blkid;
+      token_id_t tokid;
+    };
+} u_next_io;
+
+typedef enum {
+  NONE,
+  NET,
+  BLOCK
+} e_next_io;
 
 #define NANO 1000000000
-static bool yield(uint64_t deadline, t_next_io *next_io)
+static e_next_io yield(uint64_t deadline, u_next_io *next_io)
 {
     struct timeval now;
     struct timespec timeout;
-    bool ready = false;
+    e_next_io next = NONE;
 
     gettimeofday(&now, NULL);
     timeout.tv_sec = now.tv_sec  + deadline / NANO;
@@ -114,7 +115,7 @@ static bool yield(uint64_t deadline, t_next_io *next_io)
         if (netdev_ready_set != 0) {
           for (net_id_t i = 0; i < MAX_NET_DEVICES; i++) {
               if (netdev_ready_set & netdev_to_setid(i)) {
-                  ready = true;
+                  next = NET;
                   next_io->netid = i;
                   goto out;
               }
@@ -124,7 +125,7 @@ static bool yield(uint64_t deadline, t_next_io *next_io)
             if (blkdev_ready_set[i] != 0) {
                 for (token_id_t j = 0; j < MAX_BLK_TOKENS; j++) {
                     if (blkdev_ready_set[i] & token_to_setid(j)) {
-                        ready = true;
+                        next = BLOCK;
                         next_io->blkid = i;
                         next_io->tokid = j;
                         goto out;
@@ -141,7 +142,7 @@ static bool yield(uint64_t deadline, t_next_io *next_io)
     } while (1);
 out:
     pthread_mutex_unlock(&ready_sets_mutex);
-    return ready;
+    return next;
 }
 
 value uk_yield(value v_deadline)
@@ -152,27 +153,22 @@ value uk_yield(value v_deadline)
     const int64_t deadline = Int64_val(v_deadline);
     assert(deadline >= 0);
 
-    t_next_io next_io = {-1, -1, -1};
-    const bool result = yield(deadline, &next_io);
-
-    if (result) {
-        if (next_io.netid != -1) {
-            v_result = caml_alloc(1, 0); // key:Net
-            Store_field(v_result, 0, Val_int(next_io.netid));
-        }
-        else {
-            assert(next_io.blkid != -1);
-            assert(next_io.tokid != -1);
-            v_result = caml_alloc(2, 1); // key:Block
-            Store_field(v_result, 0, Val_int(next_io.blkid));
-            Store_field(v_result, 1, Val_int(next_io.tokid));
-        }
-        assert(v_result != Val_int(0));
-    }
-    else {
+    u_next_io next_io = {.blkid =-1, .tokid = -1};
+    switch (yield(deadline, &next_io)) {
+      case NONE:
         v_result = Val_int(0); // key:Nothing
-    }
+        break;
 
+      case NET:
+        assert(next_io.netid != -1);
+        v_result = caml_alloc_1(0 /*Net*/, Val_int(next_io.netid));
+        break;
+
+      case BLOCK:
+        assert(next_io.blkid != -1 && next_io.tokid != -1);
+        v_result = caml_alloc_2(1 /*Block*/, Val_int(next_io.blkid),
+          Val_int(next_io.tokid));
+    }
     CAMLreturn(v_result);
 }
 

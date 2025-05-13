@@ -6,6 +6,7 @@
  * Copyright (c) 2024-2025 Samuel Hym <samuel@tarides.com>
  *)
 
+(* Net: device_id; Block: device_id * token_id *)
 type key = Net of int | Block of int * int | Nothing
 
 external uk_yield : int64 -> key = "uk_yield"
@@ -13,47 +14,43 @@ external uk_yield : int64 -> key = "uk_yield"
 external uk_netdev_is_queue_ready : int -> bool = "uk_netdev_is_queue_ready"
 [@@noalloc]
 
-module Pending_map = Map.Make (struct
-  (* Net: device_id; Block: device_id * token_id *)
+module Pending_map = Hashtbl.Make(struct
   type t = key
-
-  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
 end)
 
-module UkEngine : sig
+module Uk_engine : sig
   val iter : bool -> unit
   val data_on_netdev : int -> bool
   val wait_for_work_netdev : int -> unit Lwt.t
   val wait_for_work_blkdev : int -> int -> unit Lwt.t
 end = struct
-  let wait_device_ready = ref Pending_map.empty
-
+  let wait_device_ready = Pending_map.create 10
   let data_on_netdev devid = uk_netdev_is_queue_ready devid
 
   let iter nonblocking =
-    let now = Time.time () in
     let timeout =
       if nonblocking then Int64.zero
       else
-        let time =
-          match Time.select_next () with
-          | None -> Duration.of_day 1
-          | Some time -> time
-        in
-        if time < now then 0L else Int64.(sub time now)
+        match Time.select_next () with
+        | None -> Duration.of_day 1
+        | Some time ->
+            let now = Time.time () in
+            if time < now then 0L else Int64.(sub time now)
     in
     match uk_yield timeout with
     | Nothing -> ()
     | io -> (
-        match Pending_map.find_opt io !wait_device_ready with
+        match Pending_map.find_opt wait_device_ready io with
         | Some cond -> Lwt_condition.broadcast cond ()
         | _ -> assert false)
 
   let pending_cond key =
-    match Pending_map.find_opt key !wait_device_ready with
+    match Pending_map.find_opt wait_device_ready key with
     | None ->
         let cond = Lwt_condition.create () in
-        wait_device_ready := Pending_map.add key cond !wait_device_ready;
+        Pending_map.add wait_device_ready key cond;
         cond
     | Some cond -> cond
 
@@ -77,7 +74,7 @@ let rec run t =
       (* Call enter hooks. *)
       Mirage_runtime.run_enter_iter_hooks ();
       (* Do the main loop call. *)
-      UkEngine.iter (Lwt.paused_count () > 0);
+      Uk_engine.iter (Lwt.paused_count () > 0);
       (* Wakeup paused threads again. *)
       Lwt.wakeup_paused ();
       (* Call leave hooks. *)
